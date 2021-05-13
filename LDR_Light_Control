@@ -1,0 +1,143 @@
+// LED will blink when in config mode
+#define BLYNK_PRINT Serial
+ 
+ 
+#include <ESP8266WiFi.h>
+#include <BlynkSimpleEsp8266.h>
+#include <WiFiManager.h> // https://github.com/tzapu/WiFiManager
+
+//for LED status
+#include <Ticker.h>
+Ticker ticker;
+
+#ifndef LED_BUILTIN
+#define LED_BUILTIN 13 // ESP32 DOES NOT DEFINE LED_BUILTIN
+#endif
+
+const int ledPin = 5;
+char auth[] = "uy0r_5CrHjSftpM84mElrhZa9OnyMtbB";
+int LED = LED_BUILTIN;
+
+void tick()
+{
+  //toggle state
+  digitalWrite(LED, !digitalRead(LED));     // set pin to the opposite state
+}
+
+//gets called when WiFiManager enters configuration mode
+void configModeCallback (WiFiManager *myWiFiManager) {
+  Serial.println("Entered config mode");
+  Serial.println(WiFi.softAPIP());
+  //if you used auto generated SSID, print it
+  Serial.println(myWiFiManager->getConfigPortalSSID());
+  //entered config mode, make led toggle faster
+  ticker.attach(0.2, tick);
+}
+
+BlynkTimer timer;
+
+
+const int Brightest = 1024; //620;   //you need to replace this value with Value_1
+const int Darkest = 380;//310;  //you need to replace this value with Value_2
+int ldr_value = 0;
+int Brightnesspercent=0;
+
+void sendSensor()
+{
+
+ldr_value = analogRead(A0);  //put Sensor insert into soil
+Serial.println(ldr_value);
+Brightnesspercent = map(ldr_value, Darkest, Brightest, 0, 100);
+if(Brightnesspercent >= 100)
+{
+  Brightnesspercent = 100;
+  Serial.println("100 %");
+}
+else if(Brightnesspercent <=0)
+{
+  Brightnesspercent = 0;
+  Serial.println("0 %");
+}
+else if(Brightnesspercent >0 && Brightnesspercent < 100)
+{
+  Serial.print(Brightnesspercent);
+  Serial.println("%");
+  
+}
+  if (ldr_value<=800) 
+  {
+
+  digitalWrite(ledPin, HIGH);
+  Serial.println("It is too DARK, LED is ON");
+
+  }
+
+  else {
+
+  digitalWrite(ledPin, LOW);
+  Serial.println("It is too BRIGHT, LED is OFF");
+
+  }
+  
+  delay(1000);
+
+  Blynk.virtualWrite(V1, Brightnesspercent);
+  
+}
+
+
+void setup() {
+  WiFi.mode(WIFI_STA); // explicitly set mode, esp defaults to STA+AP
+  // put your setup code here, to run once:
+  Serial.begin(115200);
+  Blynk.config(auth);
+  // You can also specify server:
+  //Blynk.begin(auth, ssid, pass, "blynk-cloud.com", 8442);
+  //Blynk.begin(auth, ssid, pass, IPAddress(192,168,1,100), 8442);
+ 
+
+ 
+  // Setup a function to be called every second
+  timer.setInterval(1000L, sendSensor);
+  //set led pin as output
+  pinMode(LED, OUTPUT);
+  pinMode(ledPin, OUTPUT);
+  // start ticker with 0.5 because we start in AP mode and try to connect
+  ticker.attach(0.6, tick);
+
+  //WiFiManager
+  //Local intialization. Once its business is done, there is no need to keep it around
+  WiFiManager wm;
+  //reset settings - for testing
+  //wm.resetSettings();
+  
+  //change starting SSID here
+  wm.autoConnect("LDR_Light_control");
+  
+  //set callback that gets called when connecting to previous WiFi fails, and enters Access Point mode
+  wm.setAPCallback(configModeCallback);
+
+  //fetches ssid and pass and tries to connect
+  //if it does not connect it starts an access point with the specified name
+  //here  "AutoConnectAP"
+  //and goes into a blocking loop awaiting configuration
+  if (!wm.autoConnect()) {
+    Serial.println("failed to connect and hit timeout");
+    //reset and try again, or maybe put it to deep sleep
+    ESP.restart();
+    delay(1000);
+  }
+
+  //if you get here you have connected to the WiFi
+  Serial.println("connected...yeey :)");
+  ticker.detach();
+  //keep LED on
+  digitalWrite(LED, LOW);
+}
+
+void loop() {
+  // put your main code here, to run repeatedly:
+
+ Blynk.run();
+  timer.run();
+}
